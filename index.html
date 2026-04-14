@@ -1224,10 +1224,12 @@ function renderTimeline() {
 }
 
 function buildCharts(sourceData = getGlobalFilteredData()) {
-  buildStatusChart(sourceData);
-  buildPriorityChart(sourceData);
-  buildFrenteChart(sourceData);
-  buildRespChart(sourceData);
+  const semFinalizadas = sourceData.filter(r => r.status !== 'Finalizado');
+
+  buildStatusChart(sourceData); // mantém total geral
+  buildPriorityChart(semFinalizadas);
+  buildFrenteChart(semFinalizadas);
+  buildRespChart(semFinalizadas);
 }
 
 function destroyChart(id) {
