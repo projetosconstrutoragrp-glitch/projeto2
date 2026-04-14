@@ -528,9 +528,9 @@
     </div>
     <div class="kpi-card mid">
       <div class="kpi-icon-row"><div class="kpi-icon mid"><i class="fas fa-gears"></i></div></div>
-      <div class="kpi-label">Em Andamento</div>
+      <div class="kpi-label">Pendentes</div>
       <div class="kpi-value" id="kpi-andamento">—</div>
-      <div class="kpi-sub">em execução</div>
+      <div class="kpi-sub">não finalizadas</div>
     </div>
     <div class="kpi-card light">
       <div class="kpi-icon-row"><div class="kpi-icon light"><i class="fas fa-circle-check"></i></div></div>
@@ -546,16 +546,11 @@
     </div>
     <div class="kpi-card mid">
       <div class="kpi-icon-row"><div class="kpi-icon mid"><i class="fas fa-circle-exclamation"></i></div></div>
-      <div class="kpi-label">Urgentes (P5)</div>
+      <div class="kpi-label">Urgentes (P5 - Pendentes)</div>
       <div class="kpi-value" id="kpi-prio5">—</div>
       <div class="kpi-sub">prioridade máxima</div>
     </div>
-    <div class="kpi-card light">
-      <div class="kpi-icon-row"><div class="kpi-icon light"><i class="fas fa-ban"></i></div></div>
-      <div class="kpi-label">Não Programadas</div>
-      <div class="kpi-value" id="kpi-naoprog">—</div>
-      <div class="kpi-sub">sem programação</div>
-    </div>
+    
   </div>
 
   <div class="section-title"><i class="fas fa-chart-pie"></i> Análises Visuais</div>
@@ -861,17 +856,20 @@ function updateKPIs(data) {
   const today = new Date();
   today.setHours(0,0,0,0);
 
-  const atrasadas = d.filter(r => {
-    if (r.status === 'Finalizado') return false;
+  const pendentes = d.filter(r => r.status !== 'Finalizado');
+
+  const atrasadas = pendentes.filter(r => {
     const dt = parseDate(r.dataLimite);
     return dt && dt < today;
   });
 
+  const urgentes = pendentes.filter(r => r.prioridade === 5);
+
   set('kpi-total', d.length);
-  set('kpi-andamento', d.filter(r => r.status === 'Em andamento').length);
   set('kpi-fin', d.filter(r => r.status === 'Finalizado').length);
+  set('kpi-andamento', pendentes.length); // agora é PENDENTES
   set('kpi-atrasadas', atrasadas.length);
-  set('kpi-prio5', d.filter(r => r.prioridade === 5).length);
+  set('kpi-prio5', urgentes.length);
   set('kpi-naoprog', d.filter(r => r.status === 'Não Programado').length);
 }
 function set(id, v) {
@@ -888,6 +886,10 @@ function buildFilters() {
   populateSelect('f-resp', resps);
   populateSelect('f-urgentes-frente', frentes);
   populateSelect('f-timeline-frente', frentes);
+}
+function getGlobalFilteredData() {
+  const globalFrente = document.getElementById('f-global-frente')?.value || '';
+  return allData.filter(r => !globalFrente || r.frente === globalFrente);
 }
 function populateSelect(id, opts) {
   const sel = document.getElementById(id);
@@ -922,13 +924,16 @@ function applyFilters() {
   const prio = document.getElementById('f-prio').value;
 
   let filtered = getGlobalFilteredData().filter(r => {
-    if (frente && r.frente !== frente) return false;
-    if (status && r.status !== status) return false;
-    if (resp && r.responsavel !== resp) return false;
-    if (prio && String(r.prioridade) !== prio) return false;
-    if (busca && !`${r.frente} ${r.descricao} ${r.risco} ${r.comentario} ${r.responsavel}`.toLowerCase().includes(busca)) return false;
-    return true;
-  });
+  if (!status && r.status === 'Finalizado') return false;
+
+  if (frente && r.frente !== frente) return false;
+  if (status && r.status !== status) return false;
+  if (resp && r.responsavel !== resp) return false;
+  if (prio && String(r.prioridade) !== prio) return false;
+  if (busca && !`${r.frente} ${r.descricao} ${r.risco} ${r.comentario} ${r.responsavel}`.toLowerCase().includes(busca)) return false;
+
+  return true;
+});
 
   if (sortCol) filtered = sortData(filtered);
   renderTable(filtered);
