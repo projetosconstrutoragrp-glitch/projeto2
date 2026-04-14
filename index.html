@@ -35,7 +35,7 @@
       --p5-bg:#fee2e2; --p5-tx:#b91c1c;
 
       --date-ok:#4a4a4a;
-      --date-soon:#6b7c8f;
+      --date-soon:#c9a15a;
       --date-overdue:#b85c5c;
 
       --radius:10px;
@@ -420,8 +420,17 @@
     .risco-pill.empty { color:var(--gray-mid); font-style:italic; border-color:transparent; background:transparent; }
 
     .date-cell { white-space:nowrap; font-size:12px; }
-    .date-overdue { color:var(--black); font-weight:700; }
-    .date-soon { color:var(--gray-dark); font-weight:600; }
+    .date-overdue,
+.date-overdue i {
+  color: var(--date-overdue) !important;
+  font-weight: 700;
+}
+
+.date-soon,
+.date-soon i {
+  color: var(--date-soon) !important;
+  font-weight: 600;
+}
     .date-ok { color:var(--text-light); }
 
     .avatar {
