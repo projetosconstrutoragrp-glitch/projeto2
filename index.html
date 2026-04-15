@@ -489,6 +489,32 @@
       header { padding:0 16px; }
       .kpi-grid { grid-template-columns:repeat(2,1fr); }
     }
+.kpi-sobrecarga-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.sobrecarga-wrap {
+  position: relative;
+  height: 60px; /* pequeno e horizontal */
+  margin-top: 6px;
+}
+
+#kpiSobrecargaChart {
+  width: 100% !important;
+  height: 60px !important;
+}
+
+.sobrecarga-label {
+  position: absolute;
+  top: 15%;
+  left: 55%;
+  transform: translate(0%; 0%);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--black);
+}
   </style>
 </head>
 <body>
@@ -560,7 +586,36 @@
       <div class="kpi-value" id="kpi-prio5">—</div>
       <div class="kpi-sub">prioridade máxima</div>
     </div>
-    
+    <div class="kpi-card accent">
+  <div class="kpi-icon-row">
+    <div class="kpi-icon dark"><i class="fas fa-clock"></i></div>
+  </div>
+  <div class="kpi-label">% Entregas no Prazo</div>
+  <div class="kpi-value" id="kpi-prazo">—</div>
+  <div class="kpi-sub">qualidade de prazo</div>
+</div>
+
+<div class="kpi-card mid kpi-sobrecarga-card">
+  <div class="kpi-icon-row">
+    <div class="kpi-icon mid"><i class="fas fa-gauge-high"></i></div>
+  </div>
+
+  <div class="kpi-label">Índice de Sobrecarga</div>
+
+ <div class="sobrecarga-wrap"
+     title="Mede a distribuição das prioridades das atividades com relação ao total de atividades
+1.0 – 2.0 → baixa pressão
+2.1 – 3.0 → controlado
+3.1 – 4.0 → atenção
+4.1 – 5.0 → crítico">
+
+  <canvas id="kpiSobrecargaChart"></canvas>
+  <div class="sobrecarga-label" id="kpi-sobrecarga">—</div>
+
+</div>
+
+  <div class="kpi-sub">pressão operacional</div>
+</div>
   </div>
 
   <div class="section-title"><i class="fas fa-chart-pie"></i> Análises Visuais</div>
@@ -714,7 +769,8 @@ const COL = {
   tempoEstimado: 7,
   risco: 8,
   comentario: 9,
-  tipo: 10
+  tipo: 10,
+  foraPrazo: 11
 };
 
 let allData = [];
@@ -821,18 +877,19 @@ function parseCSV(text) {
     if (!cols || cols.every(c => !String(c || '').trim())) continue;
 
     rows.push({
-      frente: clean(cols[COL.frente]),
-      descricao: clean(cols[COL.descricao]),
-      prioridade: parseInt(clean(cols[COL.prioridade]), 10) || 0,
-      status: normalizeStatus(clean(cols[COL.status])),
-      dataPrevista: clean(cols[COL.dataPrevista]),
-      dataLimite: clean(cols[COL.dataLimite]),
-      responsavel: clean(cols[COL.responsavel]),
-      tempoEstimado: clean(cols[COL.tempoEstimado]),
-      risco: clean(cols[COL.risco]),
-      comentario: clean(cols[COL.comentario]),
-      tipo: clean(cols[COL.tipo]),
-    });
+  frente: clean(cols[COL.frente]),
+  descricao: clean(cols[COL.descricao]),
+  prioridade: parseInt(clean(cols[COL.prioridade]), 10) || 0,
+  status: normalizeStatus(clean(cols[COL.status])),
+  dataPrevista: clean(cols[COL.dataPrevista]),
+  dataLimite: clean(cols[COL.dataLimite]),
+  responsavel: clean(cols[COL.responsavel]),
+  tempoEstimado: clean(cols[COL.tempoEstimado]),
+  risco: clean(cols[COL.risco]),
+  comentario: clean(cols[COL.comentario]),
+  tipo: clean(cols[COL.tipo]),
+  entregueForaPrazo: clean(cols[COL.foraPrazo]).toLowerCase() === 'true'
+});
   }
   return rows;
 }
@@ -895,6 +952,33 @@ function updateKPIs(data) {
 
   const urgentes = pendentes.filter(r => r.prioridade === 5);
 
+const finalizadas = d.filter(r => r.status === 'Finalizado');
+
+const totalEntregas = finalizadas.length;
+
+const entregasNoPrazo = finalizadas.filter(r => !r.entregueForaPrazo).length;
+
+const percPrazo = totalEntregas > 0 
+  ? Math.round((entregasNoPrazo / totalEntregas) * 100)
+  : 0;
+
+let soma = 0;
+
+pendentes.forEach(r => {
+  soma += r.prioridade || 3;
+});
+
+const media = pendentes.length > 0 
+  ? soma / pendentes.length 
+  : 3;
+
+// aqui você pode usar direto
+const indiceFormatado = media.toFixed(1);
+
+set('kpi-sobrecarga', indiceFormatado);
+
+set('kpi-sobrecarga', indiceFormatado);
+set('kpi-prazo', percPrazo + '%');
   set('kpi-total', d.length);
   set('kpi-fin', d.filter(r => r.status === 'Finalizado').length);
   set('kpi-andamento', pendentes.length); // agora é PENDENTES
@@ -902,11 +986,71 @@ function updateKPIs(data) {
   set('kpi-prio5', urgentes.length);
   set('kpi-naoprog', d.filter(r => r.status === 'Não Programado').length);
 }
+function getNivelSobrecarga(v) {
+  if (v < 3) return 'Baixa';
+  if (v < 6) return 'Moderada';
+  if (v < 8) return 'Alta';
+  return 'Crítica';
+}
 function set(id, v) {
   const el = document.getElementById(id);
   if (el) el.textContent = v;
-}
+const tooltipText = `Mede a distribuição das prioridades das atividades com relação ao total de atividades
+1.0 – 2.0 → baixa pressão
+2.1 – 3.0 → controlado
+3.1 – 4.0 → atenção
+4.1 – 5.0 → crítico`;
 
+document.querySelector('.sobrecarga-wrap').title = tooltipText;
+document.getElementById('kpiSobrecargaChart').title = tooltipText;
+}
+function buildSobrecargaChart(sourceData = getGlobalFilteredData()) {
+  destroyChart('sobrecargaKPI');
+
+  // 🔥 pega o valor já calculado no KPI
+  const valor = parseFloat(document.getElementById('kpi-sobrecarga').textContent) || 0;
+
+  charts.sobrecargaKPI = new Chart(document.getElementById('kpiSobrecargaChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Sobrecarga'],
+      datasets: [{
+        data: [valor],
+        backgroundColor: valor < 2
+          ? '#4b6354'
+          : valor < 3.5
+          ? '#b45309'
+          : '#a94442',
+        borderRadius: 8,
+        barThickness: 18
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false }
+      },
+      scales: {
+        x: {
+          min: 0,
+          max: 5,
+          grid: { display: false },
+          ticks: {
+            stepSize: 1,
+            font: { size: 10 },
+            color: '#6b6860'
+          }
+        },
+        y: {
+          display: false
+        }
+      }
+    }
+  });
+}
 function buildFilters() {
   const frentes = [...new Set(allData.map(r => r.frente).filter(Boolean))].sort();
   const resps = [...new Set(allData.map(r => r.responsavel).filter(Boolean))].sort();
@@ -916,14 +1060,7 @@ function buildFilters() {
   populateSelect('f-urgentes-frente', frentes);
   populateSelect('f-timeline-frente', frentes);
 }
-function getGlobalFilteredData() {
-  const globalTipo = document.getElementById('f-global-tipo')?.value || '';
 
-  return allData.filter(r => {
-    if (globalTipo && r.tipo !== globalTipo) return false;
-    return true;
-  });
-}
 function populateSelect(id, opts) {
   const sel = document.getElementById(id);
   const cur = sel.value;
@@ -1270,6 +1407,7 @@ function buildCharts(sourceData = getGlobalFilteredData()) {
   buildPriorityChart(semFinalizadas);
   buildFrenteChart(semFinalizadas);
   buildRespChart(semFinalizadas);
+  buildSobrecargaChart(sourceData);
 }
 
 function destroyChart(id) {
