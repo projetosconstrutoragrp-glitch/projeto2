@@ -23,20 +23,30 @@
       --accent:#2e2e2e;
       --accent2:#5a5a5a;
 
-      --st-nao-bg:#fee2e2; --st-nao-tx:#b91c1c; --st-nao-dot:#ef4444;
-      --st-prog-bg:#fef3c7; --st-prog-tx:#b45309; --st-prog-dot:#f59e0b;
-      --st-and-bg:#dbeafe; --st-and-tx:#1d4ed8; --st-and-dot:#3b82f6;
-      --st-fin-bg:#dcfce7; --st-fin-tx:#166534; --st-fin-dot:#22c55e;
+      --st-nao-bg:#f1f1f1;
+--st-nao-tx:#6b6860;
+--st-nao-dot:#9a9690;
 
-      --p1-bg:#f3f4f6; --p1-tx:#4b5563;
-      --p2-bg:#e0f2fe; --p2-tx:#0369a1;
-      --p3-bg:#fef3c7; --p3-tx:#b45309;
-      --p4-bg:#fed7aa; --p4-tx:#c2410c;
-      --p5-bg:#fee2e2; --p5-tx:#b91c1c;
+--st-prog-bg:#f5f3eb;
+--st-prog-tx:#7a746b;
+--st-prog-dot:#b0aa9f;
 
+--st-and-bg:#e9ecef;
+--st-and-tx:#495057;
+--st-and-dot:#6c757d;
+
+--st-fin-bg:#e8f0ec;
+--st-fin-tx:#4b6354;
+--st-fin-dot:#6f8f7a;
+
+--p1-bg:#e5e5e5; --p1-tx:#4a4a4a;
+--p2-bg:#d0d0d0; --p2-tx:#3a3a3a;
+--p3-bg:#b8b8b8; --p3-tx:#2e2e2e;
+--p4-bg:#c9a3a3; --p4-tx:#5a2e2e;
+--p5-bg:#a94442; --p5-tx:#ffffff;
       --date-ok:#4a4a4a;
-      --date-soon:#5a97c9;
-      --date-overdue:#b85c5c;
+      --date-soon:#7a9bbd;
+      --date-overdue:#a94442;
 
       --radius:10px;
       --shadow:0 2px 8px rgba(0,0,0,0.08);
@@ -508,16 +518,16 @@
 <div class="filters-card" style="margin-bottom:22px;">
   <div class="filters-row">
     <div class="filter-group">
-      <label>Filtro Geral da Página</label>
-      <select id="f-global-frente" onchange="refreshDashboard()">
-        <option value="">Todas as frentes</option>
-      </select>
-    </div>
-    <div class="results-count" style="margin-left:0;padding-bottom:8px;">
-      Esse filtro afeta KPIs, gráficos, urgências, linha do tempo e tabela.
-    </div>
+  <label>Tipo</label>
+  <select id="f-global-tipo" onchange="refreshDashboard()">
+    <option value="">Todos</option>
+    <option>Interno</option>
+    <option>Externo</option>
+  </select>
+</div>
   </div>
 </div>
+
   <div class="section-title"><i class="fas fa-chart-bar"></i> Visão Geral</div>
   <div class="kpi-grid">
     <div class="kpi-card accent">
@@ -704,6 +714,7 @@ const COL = {
   tempoEstimado: 7,
   risco: 8,
   comentario: 9,
+  tipo: 10
 };
 
 let allData = [];
@@ -712,16 +723,25 @@ let sortAsc = true;
 let charts = {};
 
 const FRENTE_PALETTE = [
-  '#1a1a1a','#3d3d3d','#5a5a5a','#787878',
-  '#949494','#adadad','#c4c4c4','#d8d8d8',
-  '#2e2e2e','#636363','#8a8a8a','#b5b5b5'
+  '#2e2e2e',
+  '#4a4a4a',
+  '#6b6860',
+  '#8a867f',
+  '#a6a39c',
+  '#c4c1b8',
+  '#dcd9d2'
 ];
 let frenteColorMap = {};
 
 function getFrenteColor(frente) {
   if (!frenteColorMap[frente]) {
-    const keys = Object.keys(frenteColorMap);
-    frenteColorMap[frente] = FRENTE_PALETTE[keys.length % FRENTE_PALETTE.length];
+    const total = Object.keys(frenteColorMap).length;
+    
+    // gera tons de cinza distribuídos
+    const base = 60 + (total * 25); // controla a variação
+    const gray = Math.min(base, 180);
+    
+    frenteColorMap[frente] = `rgb(${gray}, ${gray}, ${gray})`;
   }
   return frenteColorMap[frente];
 }
@@ -804,18 +824,28 @@ function parseCSV(text) {
       frente: clean(cols[COL.frente]),
       descricao: clean(cols[COL.descricao]),
       prioridade: parseInt(clean(cols[COL.prioridade]), 10) || 0,
-      status: clean(cols[COL.status]),
+      status: normalizeStatus(clean(cols[COL.status])),
       dataPrevista: clean(cols[COL.dataPrevista]),
       dataLimite: clean(cols[COL.dataLimite]),
       responsavel: clean(cols[COL.responsavel]),
       tempoEstimado: clean(cols[COL.tempoEstimado]),
       risco: clean(cols[COL.risco]),
       comentario: clean(cols[COL.comentario]),
+      tipo: clean(cols[COL.tipo]),
     });
   }
   return rows;
 }
+function normalizeStatus(s) {
+  const val = String(s || '').trim().toLowerCase();
 
+  if (val === 'não programado') return 'Não Programado';
+  if (val === 'programado') return 'Programado';
+  if (val === 'em andamento') return 'Em andamento';
+  if (val === 'finalizado') return 'Finalizado';
+
+  return 'Não Programado'; // fallback seguro
+}
 function splitCSVLine(line) {
   const res = [];
   let cur = '';
@@ -881,15 +911,18 @@ function buildFilters() {
   const frentes = [...new Set(allData.map(r => r.frente).filter(Boolean))].sort();
   const resps = [...new Set(allData.map(r => r.responsavel).filter(Boolean))].sort();
 
-  populateSelect('f-global-frente', frentes);
   populateSelect('f-frente', frentes);
   populateSelect('f-resp', resps);
   populateSelect('f-urgentes-frente', frentes);
   populateSelect('f-timeline-frente', frentes);
 }
 function getGlobalFilteredData() {
-  const globalFrente = document.getElementById('f-global-frente')?.value || '';
-  return allData.filter(r => !globalFrente || r.frente === globalFrente);
+  const globalTipo = document.getElementById('f-global-tipo')?.value || '';
+
+  return allData.filter(r => {
+    if (globalTipo && r.tipo !== globalTipo) return false;
+    return true;
+  });
 }
 function populateSelect(id, opts) {
   const sel = document.getElementById(id);
@@ -904,8 +937,12 @@ function populateSelect(id, opts) {
   sel.value = opts.includes(cur) ? cur : '';
 }
 function getGlobalFilteredData() {
-  const globalFrente = document.getElementById('f-global-frente')?.value || '';
-  return allData.filter(r => !globalFrente || r.frente === globalFrente);
+  const globalTipo = document.getElementById('f-global-tipo')?.value || '';
+
+  return allData.filter(r => {
+    if (globalTipo && r.tipo !== globalTipo) return false;
+    return true;
+  });
 }
 
 function refreshDashboard() {
@@ -940,10 +977,13 @@ function applyFilters() {
   document.getElementById('results-num').textContent = filtered.length;
 }
 function clearFilters() {
-  ['f-busca','f-frente','f-status','f-resp','f-prio'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  applyFilters();
+  ['f-busca','f-frente','f-status','f-resp','f-prio','f-global-frente','f-global-tipo']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
+  refreshDashboard();
 }
 
 function sortTable(col) {
@@ -1111,7 +1151,7 @@ function renderTimeline() {
   const frenteFiltro = document.getElementById('f-timeline-frente').value;
   const statusFiltro = document.getElementById('f-timeline-status').value;
 
-  let dados = allData.filter(r => {
+  let dados = getGlobalFilteredData().filter(r => {
     const d = parseDate(r.dataPrevista);
     if (!d) return false;
     if (frenteFiltro && r.frente !== frenteFiltro) return false;
@@ -1226,7 +1266,7 @@ function renderTimeline() {
 function buildCharts(sourceData = getGlobalFilteredData()) {
   const semFinalizadas = sourceData.filter(r => r.status !== 'Finalizado');
 
-  buildStatusChart(sourceData); // mantém total geral
+  buildStatusChart(sourceData); // mantém geral
   buildPriorityChart(semFinalizadas);
   buildFrenteChart(semFinalizadas);
   buildRespChart(semFinalizadas);
@@ -1241,10 +1281,26 @@ function destroyChart(id) {
 
 function buildStatusChart(sourceData = getGlobalFilteredData()) {
   destroyChart('status');
+
   const labels = ['Não Programado','Programado','Em andamento','Finalizado'];
-  const bgColors = ['#fee2e2','#fef3c7','#dbeafe','#dcfce7'];
-  const borderColors = ['#ef4444','#f59e0b','#3b82f6','#22c55e'];
+
   const counts = labels.map(l => sourceData.filter(r => r.status === l).length);
+
+  const rootStyles = getComputedStyle(document.documentElement);
+
+  const bgColors = [
+  '#cfcfcf', // Não Programado
+  '#a6a6a6', // Programado
+  '#595959', // Em andamento
+  '#b2c1b8'  // Finalizado (verde elegante - igual ao sistema)
+];
+
+const borderColors = [
+  '#b5b5b5',
+  '#8c8c8c',
+  '#3a3a3a',
+  '#4b6354'
+];
 
   charts.status = new Chart(document.getElementById('chartStatus'), {
     type:'doughnut',
@@ -1261,7 +1317,15 @@ function buildStatusChart(sourceData = getGlobalFilteredData()) {
       responsive:true,
       maintainAspectRatio:false,
       plugins:{
-        legend:{ position:'bottom', labels:{ font:{ size:11, family:'Inter' }, padding:14, color:'#4a4a4a', boxWidth:12 } }
+        legend:{
+          position:'bottom',
+          labels:{
+            font:{ size:11, family:'Inter' },
+            padding:14,
+            color:'#4a4a4a',
+            boxWidth:12
+          }
+        }
       }
     }
   });
@@ -1272,13 +1336,12 @@ function buildPriorityChart(sourceData = getGlobalFilteredData()) {
 
   const prioridades = [1,2,3,4,5];
   const prioridadeColors = {
-    1:'#f3f4f6',
-    2:'#e0f2fe',
-    3:'#fef3c7',
-    4:'#fed7aa',
-    5:'#fee2e2'
-  };
-
+  1:'#e5e5e5',
+  2:'#d0d0d0',
+  3:'#b8b8b8',
+  4:'#c9a3a3',
+  5:'#a94442'
+};
   charts.priority = new Chart(document.getElementById('chartPriority'), {
     type:'bar',
     data:{
@@ -1290,7 +1353,9 @@ function buildPriorityChart(sourceData = getGlobalFilteredData()) {
         borderColor: ['#9ca3af','#38bdf8','#f59e0b','#fb923c','#ef4444'],
         borderWidth: 1.5,
         borderRadius: 6,
-        borderSkipped: false
+        borderSkipped: false,
+borderColor: '#ffffff',
+borderWidth: 2
       }]
     },
     options:{
@@ -1307,22 +1372,48 @@ function buildPriorityChart(sourceData = getGlobalFilteredData()) {
 
 function buildFrenteChart(sourceData = getGlobalFilteredData()) {
   destroyChart('frente');
+
   const counts = {};
-  sourceData.forEach(r => { if (r.frente) counts[r.frente] = (counts[r.frente] || 0) + 1; });
-  const labels = Object.keys(counts).sort();
+  sourceData.forEach(r => {
+    if (r.frente) counts[r.frente] = (counts[r.frente] || 0) + 1;
+  });
+
+  // 🔥 ORDENA DO MAIOR PARA O MENOR
+  const sorted = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1]);
+
+  const labels = sorted.map(item => item[0]);
+  const data = sorted.map(item => item[1]);
+
   const colors = labels.map(l => getFrenteColor(l));
 
   charts.frente = new Chart(document.getElementById('chartFrente'), {
     type:'bar',
-    data:{ labels, datasets:[{ label:'Demandas', data:labels.map(l => counts[l]), backgroundColor:colors, borderRadius:5, borderSkipped:false }] },
+    data:{
+      labels,
+      datasets:[{
+        label:'Demandas',
+        data,
+        backgroundColor:colors,
+        borderRadius:5,
+        borderSkipped:false
+      }]
+    },
     options:{
       responsive:true,
       maintainAspectRatio:false,
       indexAxis:'y',
       plugins:{ legend:{ display:false } },
       scales:{
-        x:{ beginAtZero:true, ticks:{ stepSize:1, font:{ size:11 }, color:'#6b6860' }, grid:{ color:'#ebebeb' } },
-        y:{ grid:{ display:false }, ticks:{ font:{ size:11 }, color:'#4a4a4a' } }
+        x:{
+          beginAtZero:true,
+          ticks:{ stepSize:1, font:{ size:11 }, color:'#6b6860' },
+          grid:{ color:'#ebebeb' }
+        },
+        y:{
+          grid:{ display:false },
+          ticks:{ font:{ size:11 }, color:'#4a4a4a' }
+        }
       }
     }
   });
@@ -1333,7 +1424,10 @@ function buildRespChart(sourceData = getGlobalFilteredData()) {
   const counts = {};
   sourceData.forEach(r => { if (r.responsavel) counts[r.responsavel] = (counts[r.responsavel] || 0) + 1; });
   const labels = Object.keys(counts).sort();
-  const colors = labels.map((_, i) => FRENTE_PALETTE[i % FRENTE_PALETTE.length]);
+  const colors = labels.map((_, i) => {
+  const gray = 60 + (i * 20);
+  return `rgb(${Math.min(gray, 200)}, ${Math.min(gray, 200)}, ${Math.min(gray, 200)})`;
+});
 
   charts.resp = new Chart(document.getElementById('chartResp'), {
     type:'doughnut',
@@ -1360,11 +1454,11 @@ function formatDate(d) {
   return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
-window.addEventListener('resize', () => {
-  if (allData.length) renderTimeline();
+window.addEventListener('DOMContentLoaded', () => {
+  loadData();
 });
 
-loadData();
+
 </script>
 </body>
 </html>
