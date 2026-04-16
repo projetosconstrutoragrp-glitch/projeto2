@@ -368,6 +368,8 @@
     tbody tr:last-child { border-bottom:none; }
     tbody tr:hover { background:var(--bg); }
     tbody td { padding:11px 14px; vertical-align:middle; }
+    tbody tr.marco-row { background:#e9ecef; color:#495057; }
+    tbody tr.marco-row:hover { background:#dce0e5; }
 
     .desc-cell { max-width:250px; }
     .desc-text { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45; }
@@ -924,14 +926,14 @@
       <table id="entregaveis-table">
         <thead>
           <tr>
-            <th>Obra</th>
-            <th>Disciplina</th>
-            <th>Arquivo</th>
-            <th>Entregue</th>
-            <th>Data Prevista</th>
-            <th>Data Entregue</th>
-            <th>Contratado</th>
-            <th>Empresa</th>
+            <th onclick="sortEntregaveisTable('obra')">Obra <span class="sort-icon">⇅</span></th>
+            <th onclick="sortEntregaveisTable('disciplina')">Disciplina <span class="sort-icon">⇅</span></th>
+            <th onclick="sortEntregaveisTable('arquivo')">Arquivo <span class="sort-icon">⇅</span></th>
+            <th onclick="sortEntregaveisTable('entregue')">Entregue <span class="sort-icon">⇅</span></th>
+            <th onclick="sortEntregaveisTable('dataPrevista')">Data Prevista <span class="sort-icon">⇅</span></th>
+            <th onclick="sortEntregaveisTable('dataEntregue')">Data Entregue <span class="sort-icon">⇅</span></th>
+            <th onclick="sortEntregaveisTable('contratado')">Contratado <span class="sort-icon">⇅</span></th>
+            <th onclick="sortEntregaveisTable('empresa')">Empresa <span class="sort-icon">⇅</span></th>
           </tr>
         </thead>
         <tbody id="entregaveis-tbody"></tbody>
@@ -978,6 +980,8 @@ const COL = {
 let allData = [];
 let sortCol = null;
 let sortAsc = true;
+let entregaveisSortCol = null;
+let entregaveisSortAsc = true;
 let charts = {};
 
 const FRENTE_PALETTE = [
@@ -1854,6 +1858,11 @@ const ENTREGAVEIS_COL = {
 
 let allEntregaveisData = {};
 
+function isMarcoItem(item) {
+  // Marco: tem disciplina mas arquivo vazio
+  return !!(String(item.disciplina || '').trim() && !String(item.arquivo || '').trim());
+}
+
 async function loadEntregaveisData() {
   document.getElementById('loading-overlay').style.display = 'flex';
   
@@ -1921,20 +1930,10 @@ function parseEntregaveisCSV(text) {
 }
 
 function aggregateEntregaveisPorDisciplina(dados) {
-  const normalizeDisciplina = value => {
-    if (!value) return '';
-    return String(value).trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  };
-
-  const isMarco = disciplina => {
-    const normalized = normalizeDisciplina(disciplina);
-    return normalized === 'lancamento' || normalized === 'inicio de obra';
-  };
-
   const grouped = new Map();
 
   dados.forEach(r => {
-    if (isMarco(r.disciplina)) return;
+    if (isMarcoItem(r)) return;
     
     const key = String(r.disciplina || '').trim();
     if (!grouped.has(key)) {
@@ -1981,21 +1980,11 @@ function renderEntregaveisResumo() {
   const container = document.getElementById('entregaveis-resumo');
   container.innerHTML = '';
   
-  const normalizeDisciplina = value => {
-    if (!value) return '';
-    return String(value).trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  };
-
-  const isMarco = disciplina => {
-    const normalized = normalizeDisciplina(disciplina);
-    return normalized === 'lancamento' || normalized === 'inicio de obra';
-  };
-  
   Object.entries(allEntregaveisData).forEach(([obra, dados]) => {
     if (!dados.length) return;
 
     // Contar todas as linhas (exceto marcos)
-    const items = dados.filter(r => !isMarco(r.disciplina));
+    const items = dados.filter(r => !isMarcoItem(r));
     const totalLinhas = items.length;
     const entregues = items.filter(r => r.entregue).length;
     const percentualEntrega = totalLinhas ? Math.round((entregues / totalLinhas) * 100) : 0;
@@ -2047,16 +2036,6 @@ function applyEntregaveisFilters() {
   const statusFiltro = document.getElementById('f-entregaveis-status').value;
   const contratacaoFiltro = document.getElementById('f-entregaveis-contratacao').value;
   
-  const normalizeDisciplina = value => {
-    if (!value) return '';
-    return String(value).trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  };
-
-  const isMarco = disciplina => {
-    const normalized = normalizeDisciplina(disciplina);
-    return normalized === 'lancamento' || normalized === 'inicio de obra';
-  };
-  
   let filteredTabela = [];
   let filteredTimeline = [];
   
@@ -2064,7 +2043,14 @@ function applyEntregaveisFilters() {
     if (obraFiltro && obra !== obraFiltro) return;
 
     dados.forEach(r => {
-      if (isMarco(r.disciplina)) return;
+      const isMarco = isMarcoItem(r);
+      
+      // Marcos: mostram na tabela mas não na timeline
+      if (isMarco) {
+        const item = { ...r, obra };
+        filteredTabela.push(item);
+        return;
+      }
 
       if (statusFiltro === 'entregue' && !r.entregue) return;
       if (statusFiltro === 'pendente' && r.entregue) return;
@@ -2086,6 +2072,38 @@ function applyEntregaveisFilters() {
   window.lastObraFiltro = obraFiltro;
 }
 
+function sortEntregaveisTable(col) {
+  if (entregaveisSortCol === col) {
+    entregaveisSortAsc = !entregaveisSortAsc;
+  } else {
+    entregaveisSortCol = col;
+    entregaveisSortAsc = true;
+  }
+  applyEntregaveisFilters();
+}
+
+function sortEntregaveisData(arr) {
+  if (!entregaveisSortCol) return arr;
+  
+  return [...arr].sort((a, b) => {
+    let va = a[entregaveisSortCol], vb = b[entregaveisSortCol];
+
+    if (entregaveisSortCol === 'entregue' || entregaveisSortCol === 'contratado') {
+      // Booleanos: true > false
+      va = va ? 1 : 0;
+      vb = vb ? 1 : 0;
+    } else if (entregaveisSortCol === 'dataPrevista' || entregaveisSortCol === 'dataEntregue') {
+      va = parseDate(va) || new Date(0);
+      vb = parseDate(vb) || new Date(0);
+    } else {
+      va = String(va || '').toLowerCase();
+      vb = String(vb || '').toLowerCase();
+    }
+
+    return entregaveisSortAsc ? (va > vb ? 1 : va < vb ? -1 : 0) : (va < vb ? 1 : va > vb ? -1 : 0);
+  });
+}
+
 function renderEntregaveisTabela(dados) {
   const tbody = document.getElementById('entregaveis-tbody');
   const empty = document.getElementById('entregaveis-empty');
@@ -2098,18 +2116,38 @@ function renderEntregaveisTabela(dados) {
   
   empty.style.display = 'none';
   
-  dados.forEach(r => {
+  const sorted = sortEntregaveisData(dados);
+  sorted.forEach(r => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${esc(r.obra)}</strong></td>
-      <td>${esc(r.disciplina)}</td>
-      <td>${esc(r.arquivo)}</td>
-      <td style="text-align:center">${r.entregue ? '<i class="fas fa-check" style="color:#4b6354;font-weight:700"></i>' : '<i class="fas fa-times" style="color:#a94442"></i>'}</td>
-      <td>${r.dataPrevista ? formatDate(parseDate(r.dataPrevista)) : '—'}</td>
-      <td>${r.dataEntregue ? formatDate(parseDate(r.dataEntregue)) : '—'}</td>
-      <td style="text-align:center">${r.contratado ? '<i class="fas fa-check" style="color:#4b6354;font-weight:700"></i>' : '<i class="fas fa-times" style="color:#a94442"></i>'}</td>
-      <td>${esc(r.empresa)}</td>
-    `;
+    const isMarco = isMarcoItem(r);
+    
+    if (isMarco) {
+      // Marcos: apenas obra, disciplina e data prevista em azul
+      tr.className = 'marco-row';
+      tr.innerHTML = `
+        <td><strong>${esc(r.obra)}</strong></td>
+        <td><em>${esc(r.disciplina)}</em></td>
+        <td>—</td>
+        <td style="text-align:center">—</td>
+        <td>${r.dataPrevista ? formatDate(parseDate(r.dataPrevista)) : '—'}</td>
+        <td>—</td>
+        <td style="text-align:center">—</td>
+        <td>—</td>
+      `;
+    } else {
+      // Itens normais: mostra tudo
+      tr.innerHTML = `
+        <td><strong>${esc(r.obra)}</strong></td>
+        <td>${esc(r.disciplina)}</td>
+        <td>${esc(r.arquivo)}</td>
+        <td style="text-align:center">${r.entregue ? '<i class="fas fa-check" style="color:#4b6354;font-weight:700"></i>' : '<i class="fas fa-times" style="color:#a94442"></i>'}</td>
+        <td>${r.dataPrevista ? formatDate(parseDate(r.dataPrevista)) : '—'}</td>
+        <td>${r.dataEntregue ? formatDate(parseDate(r.dataEntregue)) : '—'}</td>
+        <td style="text-align:center">${r.contratado ? '<i class="fas fa-check" style="color:#4b6354;font-weight:700"></i>' : '<i class="fas fa-times" style="color:#a94442"></i>'}</td>
+        <td>${esc(r.empresa)}</td>
+      `;
+    }
+    
     tbody.appendChild(tr);
   });
 }
@@ -2119,16 +2157,6 @@ function renderEntregaveisTimeline() {
   const obraFiltro = window.lastObraFiltro || '';
   const svg = document.getElementById('entregaveis-timeline');
   svg.innerHTML = '';
-  
-  const normalizeDisciplina = value => {
-    if (!value) return '';
-    return String(value).trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  };
-
-  const isMarco = disciplina => {
-    const normalized = normalizeDisciplina(disciplina);
-    return normalized === 'lancamento' || normalized === 'inicio de obra';
-  };
 
   let eventos = [];
   let marcos = [];
@@ -2145,7 +2173,7 @@ function renderEntregaveisTimeline() {
     if (obraFiltro && obra !== obraFiltro) return;
     
     dados.forEach(r => {
-      if (!isMarco(r.disciplina) || !r.dataPrevista) return;
+      if (!isMarcoItem(r) || !r.dataPrevista) return;
       const item = { ...r, obra, date: parseDate(r.dataPrevista) };
       marcos.push(item);
     });
